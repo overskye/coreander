@@ -67,9 +67,7 @@ func (d *Controller) Share(c fiber.Ctx) error {
 	}
 
 	comment := strings.TrimSpace(c.FormValue("comment"))
-	if len(comment) > d.config.ShareCommentMaxSize {
-		comment = string([]rune(comment)[:d.config.ShareCommentMaxSize])
-	}
+	comment = truncateShareComment(comment, d.config.ShareCommentMaxSize)
 
 	newRecipients := recipientUsers
 	recipientIDs := make([]int, 0, len(recipientUsers))
@@ -96,6 +94,18 @@ func (d *Controller) Share(c fiber.Ctx) error {
 	}
 
 	return nil
+}
+
+func truncateShareComment(comment string, maxCharacters int) string {
+	if maxCharacters < 0 {
+		return comment
+	}
+
+	characters := []rune(comment)
+	if len(characters) > maxCharacters {
+		return string(characters[:maxCharacters])
+	}
+	return comment
 }
 
 func (d *Controller) sendShareEmails(c fiber.Ctx, recipientUsers []*model.User, senderName, documentTitle, docURL, highlightsURL, comment string) error {

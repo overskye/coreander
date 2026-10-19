@@ -330,6 +330,63 @@ func TestUserManagement(t *testing.T) {
 		mustReturnStatus(response, fiber.StatusNotFound, t)
 	})
 
+	t.Run("Changing own password requires the current password even without a form ID", func(t *testing.T) {
+		for _, tc := range []struct {
+			name        string
+			oldPassword string
+			wantStatus  int
+			wantHash    string
+		}{
+			{name: "missing current password", wantStatus: fiber.StatusBadRequest, wantHash: model.Hash("regular")},
+			{name: "incorrect current password", oldPassword: "wrong-password", wantStatus: fiber.StatusBadRequest, wantHash: model.Hash("regular")},
+			{name: "correct current password", oldPassword: "regular", wantStatus: fiber.StatusOK, wantHash: model.Hash("new-password")},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				reset()
+
+				data := url.Values{
+					"tab":              {"password"},
+					"password":         {"new-password"},
+					"confirm-password": {"new-password"},
+				}
+				if tc.oldPassword != "" {
+					data.Set("old-password", tc.oldPassword)
+				}
+
+				response, err := putRequest(data, regularUserCookie, app, fmt.Sprintf("/users/%s", regularUser.Username), t)
+				if response == nil || err != nil {
+					t.Fatalf("Unexpected error: %v", err)
+				}
+				mustReturnStatus(response, tc.wantStatus, t)
+
+				updatedUser := fetchUserByEmail(t, db, "regular@example.com")
+				if updatedUser.Password != tc.wantHash {
+					t.Errorf("Expected password hash %q, got %q", tc.wantHash, updatedUser.Password)
+				}
+			})
+		}
+	})
+
+	t.Run("Admin can change another user's password without the current password", func(t *testing.T) {
+		reset()
+
+		data := url.Values{
+			"tab":              {"password"},
+			"password":         {"admin-set-password"},
+			"confirm-password": {"admin-set-password"},
+		}
+		response, err := putRequest(data, adminCookie, app, fmt.Sprintf("/users/%s", regularUser.Username), t)
+		if response == nil || err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		mustReturnStatus(response, fiber.StatusOK, t)
+
+		updatedUser := fetchUserByEmail(t, db, "regular@example.com")
+		if updatedUser.Password != model.Hash("admin-set-password") {
+			t.Errorf("Expected admin-set password hash, got %q", updatedUser.Password)
+		}
+	})
+
 	t.Run("Try to delete a user without an active session", func(t *testing.T) {
 		reset()
 

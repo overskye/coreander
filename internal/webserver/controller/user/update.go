@@ -218,18 +218,14 @@ func (u *Controller) emailExists(c fiber.Ctx, session model.Session) (bool, erro
 
 // updateUserPassword gathers information from the edit user form and updates user password
 func (u *Controller) updateUserPassword(c fiber.Ctx, user model.User, session model.Session) (map[string]string, error) {
+	currentPasswordHash := user.Password
 	user.Password = c.FormValue("password")
 
 	errs := user.Validate(u.config.MinPasswordLength)
 
 	// Allow admins to change password of other users without entering user's current password
-	if session.Uuid == c.FormValue("id") {
-		user, err := u.usersRepository.FindByEmail(user.Email)
-		if err != nil {
-			return nil, fiber.ErrInternalServerError
-		}
-
-		if user.Password != model.Hash(c.FormValue("old-password")) {
+	if session.Uuid == user.Uuid {
+		if currentPasswordHash != model.Hash(c.FormValue("old-password")) {
 			errs["oldpassword"] = "The current password is not correct"
 		}
 	}
